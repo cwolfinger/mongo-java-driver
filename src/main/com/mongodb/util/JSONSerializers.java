@@ -44,7 +44,9 @@ import java.util.regex.Pattern;
  */
 public class JSONSerializers {
 
-    private JSONSerializers() {
+    private static ClassMapBasedObjectSerializer serializer;
+
+	private JSONSerializers() {
     }
 
     /**
@@ -58,7 +60,9 @@ public class JSONSerializers {
      */
     public static ObjectSerializer getLegacy() {
 
-        ClassMapBasedObjectSerializer serializer = addCommonSerializers();
+    	if (serializer != null) return serializer;
+
+         serializer = addCommonSerializers();
 
         serializer.addObjectSerializer(Date.class, new LegacyDateSerializer(serializer));
         serializer.addObjectSerializer(BSONTimestamp.class, new LegacyBSONTimestampSerializer(serializer));
@@ -75,7 +79,10 @@ public class JSONSerializers {
      */
     public static ObjectSerializer getStrict() {
 
-        ClassMapBasedObjectSerializer serializer = addCommonSerializers();
+    	
+    	if (serializer != null) return serializer;
+    	
+        serializer = addCommonSerializers();
 
         serializer.addObjectSerializer(Date.class, new DateSerializer(serializer));
         serializer.addObjectSerializer(BSONTimestamp.class, new BSONTimestampSerializer(serializer));

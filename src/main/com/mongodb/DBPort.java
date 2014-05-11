@@ -85,11 +85,11 @@ public class DBPort implements Connection {
         this.generation = generation;
 
         _logger = Logger.getLogger( _rootLogger.getName() + "." + addr.toString() );
-        _decoder = _options.dbDecoderFactory.create();
         try {
             ensureOpen();
             openedAt = System.currentTimeMillis();
             lastUsedAt = openedAt;
+            _decoder = _options.dbDecoderFactory.create();
         } catch (IOException e) {
             throw new MongoException.Network("Exception opening the socket", e);
         }
@@ -307,12 +307,6 @@ public class DBPort implements Connection {
     public String toString(){
         return "{DBPort  " + host() + "}";
     }
-    
-    @Override
-    protected void finalize() throws Throwable{
-        super.finalize();
-        close();
-    }
 
     ActiveState getActiveState() {
         isTrue("open", !closed);
@@ -430,7 +424,6 @@ public class DBPort implements Connection {
         ActiveState(final OutMessage outMessage) {
             namespace = outMessage.getNamespace();
             opCode = outMessage.getOpCode();
-            query = outMessage.getQuery() != null ? outMessage.getQuery().toString() : null;
             numDocuments = outMessage.getNumDocuments();
             this.startTime = System.nanoTime();
             this.threadName = Thread.currentThread().getName();
@@ -444,10 +437,7 @@ public class DBPort implements Connection {
             return opCode;
         }
 
-        String getQuery() {
-            return query;
-        }
-
+       
         int getNumDocuments() {
             return numDocuments;
         }
@@ -462,7 +452,6 @@ public class DBPort implements Connection {
 
         private final String namespace;
         private final OutMessage.OpCode opCode;
-        private final String query;
         private int numDocuments;
         private final long startTime;
         private final String threadName;
@@ -677,5 +666,21 @@ public class DBPort implements Connection {
 
     interface Operation<T> {
         T execute() throws IOException;
+    }
+    
+    
+    public static void main(String [] args)
+    {
+    	long start = System.currentTimeMillis();
+    	
+    	
+    	for (int i =0 ; i < 100000; i++)
+    	{
+    		new BasicDBObject("ismaster", true).append("abc", 123).toString();
+    	}
+    	
+    	long end = System.currentTimeMillis();
+    	
+    	System.out.println(end-start);
     }
 }

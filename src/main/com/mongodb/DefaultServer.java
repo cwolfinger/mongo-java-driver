@@ -53,9 +53,11 @@ class DefaultServer implements ClusterableServer {
         this.description = ServerDescription.builder().state(Connecting).address(serverAddress).build();
         serverStateListener = new DefaultServerStateListener();
         this.stateNotifier = new ServerStateNotifier(serverAddress, serverStateListener,
-                                                     settings.getHeartbeatSocketSettings(), mongo);
+                                                     settings.getHeartbeatSocketSettings(), 
+                                                     mongo,
+                                                     settings.getHeartbeatFrequency(MILLISECONDS));
         this.scheduledFuture = scheduledExecutorService.scheduleAtFixedRate(stateNotifier, 0,
-                                                                            settings.getHeartbeatFrequency(MILLISECONDS),
+                                                                            settings.getHeartbeatConnectRetryFrequency(MILLISECONDS),
                                                                             MILLISECONDS);
         this.connectionProvider = connectionProvider;
     }
@@ -87,7 +89,7 @@ class DefaultServer implements ClusterableServer {
         serverStateListener.stateChanged(new ChangeEvent<ServerDescription>(description, ServerDescription.builder()
                                                                                                           .state(Connecting)
                                                                                                           .address(serverAddress).build()));
-        scheduledExecutorService.submit(stateNotifier);
+        stateNotifier.rescheduleImmediate();
         connectionProvider.invalidate();
     }
 
@@ -114,8 +116,8 @@ class DefaultServer implements ClusterableServer {
                 listener.stateChanged(event);
             }
             if (event.getNewValue().getState() == Unconnected) {
-                scheduledExecutorService.schedule(stateNotifier, settings.getHeartbeatConnectRetryFrequency(MILLISECONDS),
-                                                  MILLISECONDS);
+            	
+            	stateNotifier.rescheduleImmediate();
             }
         }
 

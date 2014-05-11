@@ -17,7 +17,7 @@ class ServerStateNotifierSpecification extends FunctionalSpecification {
                                                               newDescription = event.newValue
                                                           }
                                                       },
-                                                      SocketSettings.builder().build(), getMongoClient())
+                                                      SocketSettings.builder().build(), getMongoClient(),5000)
     }
 
     def cleanup() {

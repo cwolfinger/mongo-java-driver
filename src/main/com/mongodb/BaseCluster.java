@@ -22,6 +22,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static java.lang.String.format;
@@ -158,7 +159,10 @@ abstract class BaseCluster implements Cluster {
     protected abstract ClusterableServer getServer(final ServerAddress serverAddress);
 
     protected synchronized void updateDescription(final ClusterDescription newDescription) {
-        LOGGER.fine(format("Updating cluster description to  %s", newDescription.getShortDescription()));
+    	if (LOGGER.isLoggable(Level.FINE))
+    	{
+    		LOGGER.fine(format("Updating cluster description to  %s", newDescription.getShortDescription()));
+    	}
 
         description = newDescription;
         final CountDownLatch current = phase.getAndSet(new CountDownLatch(1));

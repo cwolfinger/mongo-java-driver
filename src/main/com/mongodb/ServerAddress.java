@@ -89,6 +89,7 @@ public class ServerAddress {
 
         _host = host;
         _port = port;
+        _toStringValue = _host + ":" + _port;
     }
 
     /**
@@ -115,6 +116,8 @@ public class ServerAddress {
     public ServerAddress( InetSocketAddress addr ){
         _host = addr.getHostName();
         _port = addr.getPort();
+        _toStringValue = _host + ":" + _port;
+
     }
 
     // --------
@@ -187,11 +190,12 @@ public class ServerAddress {
 
     @Override
     public String toString(){
-        return _host + ":" + _port;
+        return _toStringValue;
     }
 
     final String _host;
     final int _port;
+    final String _toStringValue;
 
     // --------
     // static helpers

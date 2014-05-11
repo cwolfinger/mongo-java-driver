@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -46,71 +47,99 @@ class ServerStateNotifier implements Runnable {
     private volatile boolean isClosed;
     private DBPort connection;
 
+	private long heartbeatFrequencyMs;
+
+	private long nextRuntimeMillis;
+	
+	private boolean immediateRun;
+	
+	private ServerDescription connectingServerDescription;
+
+	private ServerDescription unconnectedServerDescription; 
+
     ServerStateNotifier(final ServerAddress serverAddress, final ChangeListener<ServerDescription> serverStateListener,
-                        final SocketSettings socketSettings, final Mongo mongo) {
+                        final SocketSettings socketSettings, final Mongo mongo, 
+                       long heartbeatFrequencyMs) 
+    {
         this.serverAddress = serverAddress;
         this.serverStateListener = serverStateListener;
         this.socketSettings = socketSettings;
         this.mongo = mongo;
-        serverDescription = getConnectingServerDescription();
+        this.connectingServerDescription = getConnectingServerDescription();
+        this.unconnectedServerDescription = getUnconnectedServerDescription();
+        serverDescription = connectingServerDescription;
+        this.heartbeatFrequencyMs = heartbeatFrequencyMs;
+        this.nextRuntimeMillis = System.currentTimeMillis();        
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public synchronized void run() {
+    public void run() {
         if (isClosed) {
             return;
         }
-
-        final ServerDescription currentServerDescription = serverDescription;
-        Throwable throwable = null;
-        try {
-            if (connection == null) {
-                connection = new DBPort(serverAddress, null, getOptions(), 0);
-            }
-            try {
-                serverDescription = lookupServerDescription();
-            } catch (IOException e) {
-                // in case the connection has been reset since the last run, do one retry immediately before reporting that the server is
-                // down
-                count = 0;
-                elapsedNanosSum = 0;
-                if (connection != null) {
-                    connection.close();
-                    connection = null;
-                }
-                connection = new DBPort(serverAddress, null, getOptions(), 0);
-                try {
-                    serverDescription = lookupServerDescription();
-                } catch (IOException e1) {
-                    connection.close();
-                    connection = null;
-                    throw e1;
-                }
-            }
-        } catch (Throwable t) {
-            throwable = t;
-            serverDescription = getUnconnectedServerDescription();
-        }
-
-        if (!isClosed) {
-            try {
-                // Note that the ServerDescription.equals method does not include the average ping time as part of the comparison,
-                // so this will not spam the logs too hard.
-                if (!currentServerDescription.equals(serverDescription)) {
-                    if (throwable != null) {
-                        LOGGER.log(Level.INFO, format("Exception in monitor thread while connecting to server %s", serverAddress),
-                                   throwable);
-                    } else {
-                        LOGGER.info(format("Monitor thread successfully connected to server with description %s", serverDescription));
-                    }
-                }
-                serverStateListener.stateChanged(new ChangeEvent<ServerDescription>(currentServerDescription, serverDescription));
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "Exception in monitor thread during notification of server description state change", t);
-            }
+        
+        if (System.currentTimeMillis() >= nextRuntimeMillis || immediateRun)
+        {        	
+	        final ServerDescription currentServerDescription = serverDescription;
+	        Throwable throwable = null;
+	        
+	        throwable = lookupServerDescription(throwable);
+	        this.nextRuntimeMillis = System.currentTimeMillis()+heartbeatFrequencyMs;
+	        immediateRun = false;
+	
+	        if (!isClosed) {
+	            try {
+	                // Note that the ServerDescription.equals method does not include the average ping time as part of the comparison,
+	                // so this will not spam the logs too hard.
+	                if (!currentServerDescription.equals(serverDescription)) {
+	                    if (throwable != null) {
+	                        LOGGER.log(Level.INFO, format("Exception in monitor thread while connecting to server %s", serverAddress),
+	                                   throwable);
+	                    } else {
+	                        LOGGER.info(format("Monitor thread successfully connected to server with description %s", serverDescription));
+	                    }
+	                    
+	                }
+	                serverStateListener.stateChanged(new ChangeEvent<ServerDescription>(currentServerDescription, serverDescription));
+	            } catch (Throwable t) {
+	                LOGGER.log(Level.WARNING, "Exception in monitor thread during notification of server description state change", t);
+	            }
+	        }
         }
     }
+
+	private Throwable lookupServerDescription(Throwable throwable) {
+		try {
+		    if (connection == null) {
+		        connection = new DBPort(serverAddress, null, getOptions(), 0);
+		    }
+		    try {
+		        serverDescription = lookupServerDescription();
+		    } catch (IOException e) {
+		        // in case the connection has been reset since the last run, do one retry immediately before reporting that the server is
+		        // down
+		        count = 0;
+		        elapsedNanosSum = 0;
+		        if (connection != null) {
+		            connection.close();
+		            connection = null;
+		        }
+		        connection = new DBPort(serverAddress, null, getOptions(), 0);
+		        try {
+		            serverDescription = lookupServerDescription();
+		        } catch (IOException e1) {
+		            connection.close();
+		            connection = null;
+		            throw e1;
+		        }
+		    }
+		} catch (Throwable t) {
+		    throwable = t;
+		    serverDescription = unconnectedServerDescription;
+		}
+		return throwable;
+	}
 
     public void close() {
         isClosed = true;
@@ -223,4 +252,9 @@ class ServerStateNotifier implements Runnable {
     private ServerDescription getUnconnectedServerDescription() {
         return ServerDescription.builder().type(ServerType.Unknown).state(ServerConnectionState.Unconnected).address(serverAddress).build();
     }
+
+	public void rescheduleImmediate() {
+		immediateRun = true;		
+	}
+	
 }
